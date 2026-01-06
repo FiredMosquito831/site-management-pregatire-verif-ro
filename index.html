@@ -1,0 +1,843 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    
+    <!-- SEO Optimization -->
+    <title>Management Prep Quiz - Alexandru Amadeus</title>
+    <meta name="description" content="Management preparation platform. Simulates the exam with 7 learning units.">
+    
+    <!-- React & ReactDOM -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    
+    <!-- Babel -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        dark: { bg: '#111827', card: '#1f2937', text: '#f9fafb', border: '#374151' }
+                    },
+                    fontFamily: { sans: ['Inter', 'sans-serif'] }
+                }
+            }
+        }
+    </script>
+    
+    <!-- Phosphor Icons -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; -webkit-tap-highlight-color: transparent; }
+        .fade-in { animation: fadeIn 0.2s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+        
+        /* Compact Scrollbar */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        .dark ::-webkit-scrollbar-thumb { background: #4b5563; }
+    </style>
+</head>
+<body class="transition-colors duration-300 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useMemo, useRef } = React;
+
+        // --- 1. DATA INPUT ---
+        // PASTE YOUR 280 QUESTIONS HERE
+        // Format: { id: 1, question: "...", answers: [{text: "...", isCorrect: true}, ...]}
+        const RAW_DATA = [];
+
+        // --- 2. LOGICĂ PROCESARE ---
+        function processQuestions(rawData) {
+            if (!rawData) return [];
+            return rawData.map(q => {
+                const options = q.answers.map((ans, index) => {
+                    const optId = String.fromCharCode(97 + index); 
+                    const cleanText = ans.text.replace(/^[a-zA-Z]\)\s*/, '');
+                    return { id: optId, text: cleanText, isCorrect: ans.isCorrect };
+                });
+                const correctOpt = options.find(o => o.isCorrect);
+                return {
+                    id: q.id,
+                    text: q.question,
+                    options: options,
+                    correctAnswer: correctOpt ? correctOpt.id : null
+                };
+            });
+        }
+
+        // --- 3. UI COMPONENTS ---
+
+        function ThemeToggle({ isDark, toggleTheme }) {
+            return (
+                <button 
+                    onClick={toggleTheme}
+                    className="fixed top-3 right-3 z-50 p-2 rounded-full bg-white dark:bg-gray-800 text-gray-600 dark:text-yellow-400 shadow-md border border-gray-200 dark:border-gray-700 hover:scale-105 transition-transform"
+                    title={isDark ? "Light Mode" : "Dark Mode"}
+                >
+                    <i className={`ph-fill ${isDark ? 'ph-sun' : 'ph-moon'} text-xl`}></i>
+                </button>
+            );
+        }
+
+        function ExitButton({ onExit }) {
+            return (
+                <button 
+                    onClick={onExit}
+                    className="fixed top-3 left-3 z-50 p-2 rounded-full bg-white dark:bg-gray-800 text-red-500 shadow-md border border-gray-200 dark:border-gray-700 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors"
+                    title="Exit to Menu"
+                >
+                    <i className="ph-bold ph-x text-xl"></i>
+                </button>
+            );
+        }
+
+        function QuestionCard({ question, index, selectedOption, onSelect, showFeedback, mode = 'exam' }) {
+            if (!question) return null;
+
+            return (
+                <div className={`p-4 md:p-5 rounded-xl shadow-sm border transition-all duration-200 ${
+                    mode === 'practice' 
+                    ? 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 mb-4' 
+                    : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 flex flex-col h-full'
+                }`}>
+                    <div className="mb-3">
+                        <div className="flex items-center gap-2 mb-1.5">
+                            <span className="inline-block px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-200 text-[10px] font-bold rounded uppercase tracking-wide">
+                                Question {index + 1}
+                            </span>
+                            <span className="text-[10px] text-gray-400 dark:text-gray-500">ID: {question.id}</span>
+                        </div>
+                        <h2 className="text-base md:text-lg font-bold text-gray-800 dark:text-gray-100 leading-tight">
+                            {question.text}
+                        </h2>
+                    </div>
+
+                    <div className="space-y-2 flex-grow">
+                        {question.options.map((opt) => {
+                            let btnClass = "relative w-full p-3 text-left rounded-lg border transition-all duration-200 flex items-start gap-3 group ";
+                            const isSelected = selectedOption === opt.id;
+                            const isCorrect = opt.id === question.correctAnswer;
+                            
+                            if (showFeedback) {
+                                if (isCorrect) {
+                                    btnClass += "bg-green-50 dark:bg-green-900/20 border-green-500 text-green-900 dark:text-green-300";
+                                } else if (isSelected && !isCorrect) {
+                                    btnClass += "bg-red-50 dark:bg-red-900/20 border-red-500 text-red-900 dark:text-red-300";
+                                } else {
+                                    btnClass += "bg-gray-50 dark:bg-gray-800/50 border-gray-100 dark:border-gray-700 text-gray-400 dark:text-gray-500 opacity-60";
+                                }
+                            } else {
+                                if (isSelected) {
+                                    btnClass += "bg-blue-50 dark:bg-blue-900/20 border-blue-500 text-blue-900 dark:text-blue-100 shadow-sm ring-1 ring-blue-500/20";
+                                } else {
+                                    btnClass += "bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 hover:border-blue-400 dark:hover:border-blue-500 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700";
+                                }
+                            }
+
+                            return (
+                                <button 
+                                    key={opt.id}
+                                    onClick={() => onSelect(opt.id)}
+                                    disabled={showFeedback && mode === 'exam'} 
+                                    className={btnClass}
+                                >
+                                    <div className={`flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold border transition-colors ${
+                                        showFeedback && isCorrect ? 'bg-green-500 text-white border-green-500' :
+                                        showFeedback && isSelected && !isCorrect ? 'bg-red-500 text-white border-red-500' :
+                                        isSelected ? 'bg-blue-600 text-white border-blue-600' :
+                                        'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 border-gray-300 dark:border-gray-600'
+                                    }`}>
+                                              {opt.id.toUpperCase()}
+                                    </div>
+                                    <span className="mt-0.5 flex-grow font-medium text-sm leading-snug">{opt.text}</span>
+                                    
+                                    {showFeedback && (
+                                        <div className="w-5 flex-shrink-0 self-center">
+                                            {isCorrect && <i className="ph-fill ph-check-circle text-green-500 text-xl"></i>}
+                                            {isSelected && !isCorrect && <i className="ph-fill ph-x-circle text-red-500 text-xl"></i>}
+                                        </div>
+                                    )}
+                                </button>
+                            )
+                        })}
+                    </div>
+                </div>
+            );
+        }
+
+        // --- 4. SCREENS ---
+
+        function SetupScreen({ totalPool, onStart, hasSavedSession, onResume }) {
+            const [selectedCount, setSelectedCount] = useState(40);
+            const [customCount, setCustomCount] = useState("");
+            const [isCustom, setIsCustom] = useState(false);
+            const [mode, setMode] = useState('exam'); 
+            const [selectedPart, setSelectedPart] = useState('all');
+
+            // Logic updated for 280 questions and 7 units
+            const availableForCurrentPart = useMemo(() => {
+                if (selectedPart === 'all') return totalPool.length;
+                if (selectedPart === 'unit1') return totalPool.filter(q => q.id >= 1 && q.id <= 40).length;
+                if (selectedPart === 'unit2') return totalPool.filter(q => q.id >= 41 && q.id <= 80).length;
+                if (selectedPart === 'unit3') return totalPool.filter(q => q.id >= 81 && q.id <= 120).length;
+                if (selectedPart === 'unit4') return totalPool.filter(q => q.id >= 121 && q.id <= 160).length;
+                if (selectedPart === 'unit5') return totalPool.filter(q => q.id >= 161 && q.id <= 200).length;
+                if (selectedPart === 'unit6') return totalPool.filter(q => q.id >= 201 && q.id <= 240).length;
+                if (selectedPart === 'unit7') return totalPool.filter(q => q.id >= 241 && q.id <= 280).length;
+                return 0;
+            }, [selectedPart, totalPool]);
+
+            const handleStart = () => {
+                let countToStart = selectedCount;
+                if (isCustom) {
+                    const val = parseInt(customCount);
+                    if (!val || val <= 0) return alert("Invalid number.");
+                    if (val > availableForCurrentPart) return alert(`Max available for current selection: ${availableForCurrentPart}`);
+                    countToStart = val;
+                } else {
+                    countToStart = Math.min(selectedCount, availableForCurrentPart);
+                }
+                
+                onStart(countToStart, mode, selectedPart);
+            };
+
+            const presetOptions = [10, 20, 30, 40];
+
+            return (
+                <div className="flex flex-col items-center justify-center min-h-screen p-4 text-center fade-in">
+                    <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-xl max-w-md w-full border border-gray-100 dark:border-gray-700">
+                        
+                        {/* Header Compact */}
+                        <div className="mb-5">
+                            <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 mb-3">
+                                <i className="ph-fill ph-student text-2xl"></i>
+                            </div>
+                            <h1 className="text-xl font-bold text-gray-800 dark:text-white leading-tight">Management Prep Quiz</h1>
+                            <p className="text-xs text-blue-600 dark:text-blue-400 font-medium mt-1">Created by Alexandru Amadeus</p>
+                        </div>
+
+                        {/* Resume Button */}
+                        {hasSavedSession && (
+                            <button 
+                                onClick={onResume}
+                                className="w-full mb-4 py-3 bg-green-600 hover:bg-green-700 text-white text-sm font-bold rounded-xl shadow-md flex items-center justify-center gap-2 animate-pulse"
+                            >
+                                <i className="ph-bold ph-arrow-u-up-left"></i>
+                                <span>Continue Previous Session</span>
+                            </button>
+                        )}
+
+                        {/* Theory Button */}
+                        <a 
+                            href="https://youtube.com"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="w-full mb-6 py-2.5 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 hover:border-red-200 dark:hover:border-red-800 hover:bg-red-50 dark:hover:bg-red-900/10 text-gray-700 dark:text-gray-200 hover:text-red-700 dark:hover:text-red-400 text-xs font-bold rounded-xl shadow-sm transition-all flex items-center justify-center gap-2 group"
+                        >
+                            <i className="ph-bold ph-youtube-logo text-red-500 text-lg group-hover:scale-110 transition-transform"></i>
+                            <span>View Theory (YouTube)</span>
+                        </a>
+
+                        <div className="space-y-4">
+                            
+                            {/* Mode Selector */}
+                            <div className="text-left">
+                                <label className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wide ml-1 block mb-2">Work Mode</label>
+                                <div className="flex bg-gray-100 dark:bg-gray-700 p-1 rounded-lg">
+                                    <button 
+                                        onClick={() => setMode('exam')}
+                                        className={`flex-1 py-2 rounded-md text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                                            mode === 'exam' 
+                                            ? 'bg-white dark:bg-gray-600 text-blue-600 dark:text-blue-300 shadow-sm' 
+                                            : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                                        }`}
+                                    >
+                                        <i className="ph-bold ph-cards"></i>
+                                        Exam
+                                    </button>
+                                    <button 
+                                        onClick={() => setMode('practice')}
+                                        className={`flex-1 py-2 rounded-md text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                                            mode === 'practice' 
+                                            ? 'bg-white dark:bg-gray-600 text-green-600 dark:text-green-300 shadow-sm' 
+                                            : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                                        }`}
+                                    >
+                                        <i className="ph-bold ph-list-checks"></i>
+                                        Practice
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Learning Unit Selector - UPDATED TO 7 UNITS */}
+                            <div className="text-left">
+                                <label className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wide ml-1 block mb-2">
+                                    Select Learning Unit
+                                </label>
+                                <div className="grid grid-cols-1 gap-2 max-h-48 overflow-y-auto pr-1">
+                                    {[
+                                        { id: 'all', label: 'All Units', sub: 'Complete Set (1-280)' },
+                                        { id: 'unit1', label: 'UNIT 1: Theoretical Foundations', sub: 'Questions 1-40' },
+                                        { id: 'unit2', label: 'UNIT 2: The Management Decision', sub: 'Questions 41-80' },
+                                        { id: 'unit3', label: 'UNIT 3: Strategic Management', sub: 'Questions 81-120' },
+                                        { id: 'unit4', label: 'UNIT 4: The Management System', sub: 'Questions 121-160' },
+                                        { id: 'unit5', label: 'UNIT 5: Project Management', sub: 'Questions 161-200' },
+                                        { id: 'unit6', label: 'UNIT 6: HR Management', sub: 'Questions 201-240' },
+                                        { id: 'unit7', label: 'UNIT 7: Entrepreneurship Context', sub: 'Questions 241-280' }
+                                    ].map((part) => (
+                                        <button
+                                            key={part.id}
+                                            onClick={() => setSelectedPart(part.id)}
+                                            className={`p-3 rounded-lg border text-left transition-all ${
+                                                selectedPart === part.id
+                                                ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-500 ring-1 ring-blue-500/20'
+                                                : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-500'
+                                            }`}
+                                        >
+                                            <div className={`text-xs font-bold ${selectedPart === part.id ? 'text-blue-700 dark:text-blue-300' : 'text-gray-700 dark:text-gray-200'}`}>
+                                                {part.label}
+                                            </div>
+                                            <div className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5">
+                                                {part.sub}
+                                            </div>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Question Count Selector */}
+                            <div className="text-left">
+                                <label className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wide ml-1 block mb-2">
+                                    Number of Questions <span className="font-normal text-gray-400 normal-case">(Available: {availableForCurrentPart})</span>
+                                </label>
+                                <div className="grid grid-cols-4 gap-2 mb-2">
+                                    {presetOptions.map(num => (
+                                        <button 
+                                            key={num}
+                                            onClick={() => { setSelectedCount(num); setIsCustom(false); }}
+                                            className={`py-2 rounded-lg border text-xs font-bold transition-all ${
+                                                !isCustom && selectedCount === num 
+                                                ? 'bg-blue-600 border-blue-600 text-white' 
+                                                : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                                            }`}
+                                        >
+                                            {num}
+                                        </button>
+                                    ))}
+                                </div>
+                                <div className="flex gap-2">
+                                    <button 
+                                        onClick={() => { setSelectedCount(availableForCurrentPart); setIsCustom(false); }}
+                                        className={`flex-1 py-2 rounded-lg border text-xs font-bold transition-all ${
+                                            !isCustom && selectedCount === availableForCurrentPart 
+                                            ? 'bg-blue-600 border-blue-600 text-white' 
+                                            : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                                        }`}
+                                    >
+                                        All ({availableForCurrentPart})
+                                    </button>
+                                    <div 
+                                        onClick={() => setIsCustom(true)}
+                                        className={`flex-1 flex items-center border rounded-lg px-2 transition-all ${
+                                            isCustom 
+                                            ? 'border-blue-600 ring-1 ring-blue-100 dark:ring-blue-900 bg-white dark:bg-gray-800' 
+                                            : 'border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700'
+                                        }`}
+                                    >
+                                        <input 
+                                            type="number" 
+                                            placeholder="Custom"
+                                            value={customCount}
+                                            onChange={(e) => setCustomCount(e.target.value)}
+                                            onFocus={() => setIsCustom(true)}
+                                            className="w-full bg-transparent outline-none text-xs font-bold text-center text-gray-800 dark:text-white placeholder-gray-400"
+                                            min="1"
+                                            max={availableForCurrentPart}
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <button 
+                            onClick={handleStart}
+                            className="w-full mt-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-sm font-bold rounded-xl shadow-lg shadow-blue-200/50 dark:shadow-none transform transition active:scale-[0.98] flex items-center justify-center gap-2"
+                        >
+                            <span>Start New Quiz</span>
+                            <i className="ph-bold ph-caret-right"></i>
+                        </button>
+                    </div>
+                </div>
+            );
+        }
+
+        function ExamModeScreen({ questions, currentIdx, answers, onAnswer, onNext, onExit }) {
+            useEffect(() => {
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            }, [currentIdx]);
+
+            if (!questions || questions.length === 0) return <div>Loading...</div>;
+            const currentQ = questions[currentIdx];
+            if (!currentQ) return <div>Error loading question.</div>;
+
+            const isAnswered = answers[currentQ.id] !== undefined;
+            
+            const score = useMemo(() => {
+                let correct = 0, wrong = 0;
+                Object.keys(answers).forEach(qid => {
+                    const q = questions.find(q => q.id === parseInt(qid));
+                    if(q) {
+                        if(answers[qid] === q.correctAnswer) correct++; else wrong++;
+                    }
+                });
+                return { correct, wrong };
+            }, [answers, questions]);
+
+            const progress = ((currentIdx + 1) / questions.length) * 100;
+
+            return (
+                <div className="min-h-screen flex flex-col max-w-xl mx-auto p-4 fade-in pb-20">
+                    <ExitButton onExit={onExit} />
+                    
+                    {/* Header Compact */}
+                    <div className="sticky top-0 z-10 bg-gray-50 dark:bg-gray-900 pt-2 pb-3 mb-1">
+                        <div className="flex justify-between items-center mb-2 bg-white dark:bg-gray-800 px-4 py-2 rounded-lg shadow-sm border border-gray-100 dark:border-gray-700">
+                            <div>
+                                <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider block">Progress</span>
+                                <span className="text-sm font-bold text-gray-700 dark:text-gray-200">
+                                    {currentIdx + 1} <span className="text-gray-400 font-normal">/ {questions.length}</span>
+                                </span>
+                            </div>
+                            <div className="flex gap-2">
+                                <div className="flex flex-col items-center px-2">
+                                    <span className="text-[9px] font-bold text-green-600 dark:text-green-400 uppercase">Correct</span>
+                                    <span className="text-sm font-bold text-green-700 dark:text-green-300">{score.correct}</span>
+                                </div>
+                                <div className="w-px bg-gray-200 dark:bg-gray-700 h-6 self-center"></div>
+                                <div className="flex flex-col items-center px-2">
+                                    <span className="text-[9px] font-bold text-red-600 dark:text-red-400 uppercase">Wrong</span>
+                                    <span className="text-sm font-bold text-red-700 dark:text-red-300">{score.wrong}</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5 overflow-hidden">
+                            <div className="bg-blue-600 h-1.5 rounded-full transition-all duration-300" style={{ width: `${progress}%` }}></div>
+                        </div>
+                    </div>
+
+                    <QuestionCard 
+                        question={currentQ}
+                        index={currentIdx}
+                        selectedOption={answers[currentQ.id]}
+                        onSelect={(optId) => onAnswer(currentQ.id, optId)}
+                        showFeedback={isAnswered}
+                        mode="exam"
+                    />
+
+                    {/* Footer */}
+                    <div className="fixed bottom-0 left-0 w-full bg-white/95 dark:bg-gray-800/95 backdrop-blur-md border-t border-gray-200 dark:border-gray-700 p-3 flex justify-center z-20">
+                        <div className="w-full max-w-xl">
+                            {isAnswered ? (
+                                <button 
+                                    onClick={onNext}
+                                    className="w-full py-3 bg-gray-900 dark:bg-white text-white dark:text-gray-900 text-sm font-bold rounded-xl shadow-lg transition transform active:scale-[0.98] flex items-center justify-center gap-2"
+                                >
+                                    <span>{currentIdx < questions.length - 1 ? 'Next' : 'See Results'}</span>
+                                    <i className="ph-bold ph-arrow-right"></i>
+                                </button>
+                            ) : (
+                                <div className="text-center text-gray-400 dark:text-gray-500 text-xs font-medium py-2">
+                                    Select an answer to continue
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        function PracticeModeScreen({ questions, answers, onAnswer, isSubmitted, onSubmit, onExit }) {
+            if (!questions || questions.length === 0) return <div>Loading...</div>;
+            
+            const progress = Object.keys(answers).length;
+            const progressPercent = (progress / questions.length) * 100;
+
+            const stats = useMemo(() => {
+                if (!isSubmitted) return null;
+                let correct = 0;
+                questions.forEach(q => {
+                    if (answers[q.id] === q.correctAnswer) correct++;
+                });
+                return { correct, total: questions.length };
+            }, [isSubmitted, answers, questions]);
+
+            return (
+                <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors duration-300">
+                    <ExitButton onExit={onExit} />
+                    
+                    {/* Sticky Header */}
+                    <div className="sticky top-0 z-30 bg-white/90 dark:bg-gray-800/90 backdrop-blur-md border-b border-gray-200 dark:border-gray-700 px-4 py-2 shadow-sm">
+                        <div className="max-w-xl mx-auto flex items-center justify-between pl-8"> 
+                            <div className="flex flex-col">
+                                {isSubmitted ? (
+                                    <>
+                                        <span className="text-[10px] font-bold text-green-600 dark:text-green-400 uppercase">Result</span>
+                                        <span className="text-sm font-bold text-gray-800 dark:text-white">
+                                            {stats.correct} / {stats.total} Correct
+                                        </span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <span className="text-[10px] font-bold text-gray-400 uppercase">Answered</span>
+                                        <span className="text-sm font-bold text-gray-800 dark:text-white">
+                                            {progress} <span className="text-gray-400 font-normal">/ {questions.length}</span>
+                                        </span>
+                                    </>
+                                )}
+                            </div>
+                            <div className="w-24 bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                                <div className={`h-2 rounded-full transition-all duration-300 ${isSubmitted ? 'bg-blue-600' : 'bg-green-500'}`} style={{ width: isSubmitted ? '100%' : `${progressPercent}%` }}></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* List */}
+                    <div className="max-w-xl mx-auto p-4 pb-24">
+                        {questions.map((q, idx) => (
+                            <QuestionCard 
+                                key={q.id}
+                                question={q}
+                                index={idx}
+                                selectedOption={answers[q.id]}
+                                onSelect={(optId) => !isSubmitted && onAnswer(q.id, optId)}
+                                showFeedback={isSubmitted} 
+                                mode="practice"
+                            />
+                        ))}
+                    </div>
+
+                    {/* Sticky Footer */}
+                    <div className="fixed bottom-0 left-0 w-full bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 p-3 shadow-lg z-30">
+                        <div className="max-w-xl mx-auto">
+                            <button 
+                                onClick={onSubmit}
+                                className={`w-full py-3 text-white text-sm font-bold rounded-xl shadow-lg transform transition active:scale-[0.98] flex items-center justify-center gap-2 ${
+                                    isSubmitted 
+                                    ? 'bg-gray-800 hover:bg-gray-900 dark:bg-gray-700 dark:hover:bg-gray-600' 
+                                    : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700'
+                                }`}
+                            >
+                                {isSubmitted ? (
+                                    <>
+                                        <i className="ph-bold ph-arrow-counter-clockwise text-lg"></i>
+                                        <span>Back to Menu</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <i className="ph-bold ph-check-circle text-lg"></i>
+                                        <span>Check All</span>
+                                    </>
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        function ResultScreen({ score, total, onRestart }) {
+            const percentage = total > 0 ? Math.round((score.correct / total) * 100) : 0;
+            let message = "";
+            let colorClass = "";
+            
+            if (percentage >= 90) { message = "Excellent!"; colorClass = "text-green-600 dark:text-green-400"; }
+            else if (percentage >= 70) { message = "Good!"; colorClass = "text-blue-600 dark:text-blue-400"; }
+            else if (percentage >= 50) { message = "Satisfactory"; colorClass = "text-yellow-600 dark:text-yellow-400"; }
+            else { message = "Try Again"; colorClass = "text-red-600 dark:text-red-400"; }
+
+            return (
+                <div className="min-h-screen flex items-center justify-center p-4 fade-in bg-gray-50 dark:bg-gray-900">
+                    <div className="bg-white dark:bg-gray-800 p-8 rounded-2xl shadow-xl max-w-sm w-full border border-gray-100 dark:border-gray-700 text-center">
+                        
+                        <div className="mb-6 relative inline-flex items-center justify-center">
+                             <svg className="w-32 h-32 transform -rotate-90">
+                                <circle
+                                    className="text-gray-100 dark:text-gray-700"
+                                    strokeWidth="10"
+                                    stroke="currentColor"
+                                    fill="transparent"
+                                    r="58"
+                                    cx="64"
+                                    cy="64"
+                                />
+                                <circle
+                                    className={percentage >= 50 ? "text-blue-500" : "text-red-500"}
+                                    strokeWidth="10"
+                                    strokeDasharray={365}
+                                    strokeDashoffset={365 - (365 * percentage) / 100}
+                                    strokeLinecap="round"
+                                    stroke="currentColor"
+                                    fill="transparent"
+                                    r="58"
+                                    cx="64"
+                                    cy="64"
+                                    style={{transition: "stroke-dashoffset 1s ease-out"}}
+                                />
+                            </svg>
+                            <div className="absolute top-0 left-0 w-full h-full flex flex-col items-center justify-center">
+                                <span className={`text-3xl font-extrabold ${colorClass}`}>{percentage}%</span>
+                            </div>
+                        </div>
+
+                        <h2 className={`text-2xl font-bold mb-1 ${colorClass}`}>{message}</h2>
+                        <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">Quiz completed.</p>
+
+                        <div className="grid grid-cols-2 gap-3 mb-6">
+                            <div className="p-3 bg-green-50 dark:bg-green-900/20 rounded-xl border border-green-100 dark:border-green-800">
+                                <p className="text-green-600 dark:text-green-400 font-bold text-[10px] uppercase tracking-wider mb-0.5">Correct</p>
+                                <p className="text-2xl font-bold text-green-700 dark:text-green-300">{score.correct}</p>
+                            </div>
+                            <div className="p-3 bg-red-50 dark:bg-red-900/20 rounded-xl border border-red-100 dark:border-red-800">
+                                <p className="text-red-600 dark:text-red-400 font-bold text-[10px] uppercase tracking-wider mb-0.5">Wrong</p>
+                                <p className="text-2xl font-bold text-red-700 dark:text-red-300">{score.wrong}</p>
+                            </div>
+                        </div>
+
+                        <button 
+                            onClick={onRestart}
+                            className="w-full py-3 bg-gray-900 dark:bg-white text-white dark:text-gray-900 text-sm font-bold rounded-xl shadow-md transition flex items-center justify-center gap-2 hover:opacity-90"
+                        >
+                            <i className="ph-bold ph-arrow-counter-clockwise"></i>
+                            <span>Start New Quiz</span>
+                        </button>
+                    </div>
+                </div>
+            );
+        }
+
+        // --- MAIN APP ---
+        function App() {
+            // STATE PRINCIPAL
+            const [screen, setScreen] = useState('setup'); // setup, playing, finished
+            const [gameMode, setGameMode] = useState('exam');
+            const [questionsPool, setQuestionsPool] = useState([]);
+            
+            // SESSION (for persistence)
+            const [activeQuestions, setActiveQuestions] = useState([]);
+            const [answers, setAnswers] = useState({});
+            const [currentIndex, setCurrentIndex] = useState(0);
+            const [isSubmitted, setIsSubmitted] = useState(false);
+            const [isDark, setIsDark] = useState(false);
+            const [hasSavedSession, setHasSavedSession] = useState(false);
+
+            // 1. INITIAL LOAD (DATA + LOCALSTORAGE)
+            useEffect(() => {
+                const processed = processQuestions(RAW_DATA);
+                setQuestionsPool(processed);
+                
+                // Dark Mode Check
+                if (localStorage.getItem('mgmt_theme') === 'dark' || (!localStorage.getItem('mgmt_theme') && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+                    setIsDark(true);
+                }
+
+                // Check for saved session on load
+                const savedSession = localStorage.getItem('mgmt_session');
+                if (savedSession) {
+                    try {
+                        const sess = JSON.parse(savedSession);
+                        if (sess.activeQuestions && sess.activeQuestions.length > 0) {
+                            setHasSavedSession(true);
+                        }
+                    } catch(e) { console.error("Err loading session", e); }
+                }
+            }, []);
+
+            // 2. SAVING STATE (On relevant changes)
+            useEffect(() => {
+                if (activeQuestions.length > 0) {
+                    const sessionData = {
+                        screen,
+                        gameMode,
+                        activeQuestions,
+                        answers,
+                        currentIndex,
+                        isSubmitted
+                    };
+                    localStorage.setItem('mgmt_session', JSON.stringify(sessionData));
+                    setHasSavedSession(true);
+                }
+            }, [screen, gameMode, activeQuestions, answers, currentIndex, isSubmitted]);
+
+            // 3. THEME EFFECT
+            useEffect(() => {
+                if (isDark) {
+                    document.documentElement.classList.add('dark');
+                    localStorage.setItem('mgmt_theme', 'dark');
+                } else {
+                    document.documentElement.classList.remove('dark');
+                    localStorage.setItem('mgmt_theme', 'light');
+                }
+            }, [isDark]);
+
+            // HANDLERS
+            const startGame = (count, mode, part) => {
+                // 1. Filter by selected Unit (Logic for 7 units)
+                let filteredPool = [...questionsPool];
+                
+                if (part === 'unit1') {
+                    filteredPool = filteredPool.filter(q => q.id >= 1 && q.id <= 40);
+                } else if (part === 'unit2') {
+                    filteredPool = filteredPool.filter(q => q.id >= 41 && q.id <= 80);
+                } else if (part === 'unit3') {
+                    filteredPool = filteredPool.filter(q => q.id >= 81 && q.id <= 120);
+                } else if (part === 'unit4') {
+                    filteredPool = filteredPool.filter(q => q.id >= 121 && q.id <= 160);
+                } else if (part === 'unit5') {
+                    filteredPool = filteredPool.filter(q => q.id >= 161 && q.id <= 200);
+                } else if (part === 'unit6') {
+                    filteredPool = filteredPool.filter(q => q.id >= 201 && q.id <= 240);
+                } else if (part === 'unit7') {
+                    filteredPool = filteredPool.filter(q => q.id >= 241 && q.id <= 280);
+                }
+                // 'all' includes 1-280
+
+                // 2. Shuffle the subset
+                const shuffled = filteredPool.sort(() => 0.5 - Math.random());
+                
+                // 3. Slice the desired count
+                const safeCount = Math.min(count, filteredPool.length);
+                const selected = shuffled.slice(0, safeCount);
+                
+                setActiveQuestions(selected);
+                setGameMode(mode);
+                setAnswers({});
+                setCurrentIndex(0);
+                setIsSubmitted(false);
+                setScreen('playing');
+            };
+
+            const resumeGame = () => {
+                const savedSession = localStorage.getItem('mgmt_session');
+                if (savedSession) {
+                    const sess = JSON.parse(savedSession);
+                    setActiveQuestions(sess.activeQuestions);
+                    setAnswers(sess.answers || {});
+                    setCurrentIndex(sess.currentIndex || 0);
+                    setGameMode(sess.gameMode || 'exam');
+                    setIsSubmitted(sess.isSubmitted || false);
+                    setScreen(sess.screen || 'playing');
+                }
+            };
+
+            const handleAnswer = (qId, optId) => {
+                setAnswers(prev => ({ ...prev, [qId]: optId }));
+            };
+
+            const handleNextQuestion = () => {
+                if (currentIndex < activeQuestions.length - 1) {
+                    setCurrentIndex(prev => prev + 1);
+                } else {
+                    setScreen('finished');
+                }
+            };
+
+            const handlePracticeSubmit = () => {
+                if (!isSubmitted) {
+                    if (Object.keys(answers).length < activeQuestions.length) {
+                        if(!confirm("You haven't answered all questions. Are you sure you want to see the results?")) return;
+                    }
+                    setIsSubmitted(true);
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                } else {
+                    // Back to menu from Practice results
+                    clearSession();
+                }
+            };
+
+            const handleExit = () => {
+                // Return to menu, keep session saved
+                setScreen('setup');
+            };
+
+            const clearSession = () => {
+                localStorage.removeItem('mgmt_session');
+                setActiveQuestions([]);
+                setAnswers({});
+                setCurrentIndex(0);
+                setIsSubmitted(false);
+                setHasSavedSession(false);
+                setScreen('setup');
+            };
+
+            const calculateScore = () => {
+                let correct = 0;
+                let wrong = 0;
+                activeQuestions.forEach(q => {
+                    if (answers[q.id] === q.correctAnswer) correct++; else wrong++;
+                });
+                return { correct, wrong };
+            };
+
+            return (
+                <div className="min-h-screen">
+                    <ThemeToggle isDark={isDark} toggleTheme={() => setIsDark(!isDark)} />
+                    
+                    {screen === 'setup' && (
+                        <SetupScreen 
+                            totalPool={questionsPool} 
+                            onStart={startGame} 
+                            hasSavedSession={hasSavedSession}
+                            onResume={resumeGame}
+                        />
+                    )}
+                    
+                    {screen === 'playing' && gameMode === 'exam' && (
+                        <ExamModeScreen 
+                            questions={activeQuestions} 
+                            currentIdx={currentIndex}
+                            answers={answers}
+                            onAnswer={handleAnswer}
+                            onNext={handleNextQuestion}
+                            onExit={handleExit}
+                        />
+                    )}
+
+                    {screen === 'playing' && gameMode === 'practice' && (
+                        <PracticeModeScreen 
+                            questions={activeQuestions} 
+                            answers={answers}
+                            onAnswer={handleAnswer}
+                            isSubmitted={isSubmitted}
+                            onSubmit={handlePracticeSubmit}
+                            onExit={handleExit}
+                        />
+                    )}
+                    
+                    {screen === 'finished' && (
+                        <ResultScreen 
+                            score={calculateScore()} 
+                            total={activeQuestions.length} 
+                            onRestart={clearSession} 
+                        />
+                    )}
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
