@@ -17089,6 +17089,16 @@
             ];
         };
 
+        // Fisher-Yates Shuffle Algorithm for true randomization
+        const shuffleArray = (array) => {
+            const newArray = [...array];
+            for (let i = newArray.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
+            }
+            return newArray;
+        };
+
         function processQuestions(rawData) {
             if (!rawData) return [];
             return rawData.map(q => {
@@ -17765,8 +17775,8 @@
                     filteredPool = filteredPool.filter(q => q.id >= partConfig.min && q.id <= partConfig.max);
                 }
 
-                // 2. Shuffle the subset
-                const shuffled = filteredPool.sort(() => 0.5 - Math.random());
+                // 2. Shuffle the subset using Fisher-Yates
+                const shuffled = shuffleArray(filteredPool); 
                 
                 // 3. Slice the desired count
                 const safeCount = Math.min(count, filteredPool.length);
